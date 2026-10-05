@@ -1,0 +1,16 @@
+{
+  "uuid": "",
+  "incidencias": [
+    {
+      "idIncidencia": "ID_incidencia",
+      "rfcEmisor": "",
+      "uuid": "",
+      "codigoError": "CFDI40147",
+      "mensajeIncidencia": "El campo DomicilioFiscalReceptor del receptor, debe encontrarse en la lista de RFC inscritos no cancelados en el SAT.",
+      "workProcessId": "8E5D8FB7-4781-5C59-B4FD-4F257BDD931E",
+      "noCertificadoPac": "",
+      "fechaRegistro": "2026-09-21T11:28:32"
+    }
+  ],
+  "exitoso": false
+}

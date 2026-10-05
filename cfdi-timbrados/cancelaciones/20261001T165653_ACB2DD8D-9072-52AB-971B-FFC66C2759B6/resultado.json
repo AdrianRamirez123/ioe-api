@@ -1,0 +1,21 @@
+{
+  "uuid": "ACB2DD8D-9072-52AB-971B-FFC66C2759B6",
+  "motivo": "02",
+  "motivoDescripcion": "Comprobante emitido con errores sin relacion",
+  "estatusPrevio": {
+    "esCancelable": "Cancelable sin aceptación",
+    "codigoEstatus": "S - Comprobante obtenido satisfactoriamente",
+    "estado": "Vigente"
+  },
+  "acuse": {
+    "fecha": "2026-10-01T10:59:04",
+    "rfcEmisor": "XIQB891116QE4",
+    "folios": [
+      {
+        "uuid": "ACB2DD8D-9072-52AB-971B-FFC66C2759B6",
+        "estatusUUID": "201"
+      }
+    ],
+    "exitoso": true
+  }
+}

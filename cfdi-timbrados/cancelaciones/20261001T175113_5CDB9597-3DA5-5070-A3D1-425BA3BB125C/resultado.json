@@ -1,0 +1,21 @@
+{
+  "uuid": "5CDB9597-3DA5-5070-A3D1-425BA3BB125C",
+  "motivo": "02",
+  "motivoDescripcion": "Comprobante emitido con errores sin relacion",
+  "estatusPrevio": {
+    "esCancelable": "Cancelable sin aceptación",
+    "codigoEstatus": "S - Comprobante obtenido satisfactoriamente",
+    "estado": "Vigente"
+  },
+  "acuse": {
+    "fecha": "2026-10-01T11:53:24",
+    "rfcEmisor": "XIQB891116QE4",
+    "folios": [
+      {
+        "uuid": "5CDB9597-3DA5-5070-A3D1-425BA3BB125C",
+        "estatusUUID": "201"
+      }
+    ],
+    "exitoso": true
+  }
+}

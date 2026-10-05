@@ -1,0 +1,21 @@
+{
+  "uuid": "CD55E0C6-4555-5010-AD2E-C9705D391401",
+  "motivo": "02",
+  "motivoDescripcion": "Comprobante emitido con errores sin relacion",
+  "estatusPrevio": {
+    "esCancelable": "Cancelable sin aceptación",
+    "codigoEstatus": "S - Comprobante obtenido satisfactoriamente",
+    "estado": "Vigente"
+  },
+  "acuse": {
+    "fecha": "2026-10-02T21:12:39",
+    "rfcEmisor": "XIQB891116QE4",
+    "folios": [
+      {
+        "uuid": "CD55E0C6-4555-5010-AD2E-C9705D391401",
+        "estatusUUID": "201"
+      }
+    ],
+    "exitoso": true
+  }
+}
