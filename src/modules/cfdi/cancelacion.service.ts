@@ -12,6 +12,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { aUtf8SinBom } from './cfdi-node';
 import { CsdService } from './csd.service';
+import { CuentaPac } from './quadrum.client';
 import { CsdStore } from './csd.store';
 import { columna } from './venta.mapper';
 import { VentaRepositorio } from './venta.repositorio';
@@ -87,11 +88,13 @@ export class CancelacionService {
     const rfcEmisor = folio
       ? columna(folio, 'RfcEmisor').toUpperCase() || this.rfcEmisor()
       : this.rfcEmisor();
+    const cuentaPac = await this.cuentaDe(rfcEmisor);
 
     const estatus = await this.ejecutar(() =>
       this.cliente.estatusSat({
         uuid: input.uuid,
         rfcEmisor,
+        cuenta: cuentaPac,
         rfcReceptor: input.rfcReceptor,
         total: input.total,
       }),
@@ -130,11 +133,13 @@ export class CancelacionService {
     const rfcEmisor = folio
       ? columna(folio, 'RfcEmisor').toUpperCase() || this.rfcEmisor()
       : this.rfcEmisor();
+    const cuentaPac = await this.cuentaDe(rfcEmisor);
 
     const estatusPrevio = await this.ejecutar(() =>
       this.cliente.estatusSat({
         uuid: input.uuid,
         rfcEmisor,
+        cuenta: cuentaPac,
         rfcReceptor: input.rfcReceptor,
         total: input.total,
       }),
@@ -250,10 +255,10 @@ export class CancelacionService {
   }
 
   /** Acuse del SAT de una cancelacion ya solicitada. */
-  acuse(uuid: string) {
-    return this.ejecutar(() =>
-      this.cliente.acuse({ uuid, rfcEmisor: this.rfcEmisor() }),
-    );
+  async acuse(uuid: string) {
+    const rfcEmisor = this.rfcEmisor();
+    const cuenta = await this.cuentaDe(rfcEmisor);
+    return this.ejecutar(() => this.cliente.acuse({ uuid, rfcEmisor, cuenta }));
   }
 
   // ---------------------------------------------------------------------
@@ -266,10 +271,11 @@ export class CancelacionService {
    */
   private async credenciales(
     rfcEmisor: string,
-  ): Promise<{ cer: Buffer; key: Buffer }> {
+  ): Promise<{ cer: Buffer; key: Buffer; cuenta?: CuentaPac }> {
     try {
       const emisor = await this.csdService.obtenerPorRfc(rfcEmisor);
       return {
+        cuenta: emisor.credencialesPac,
         cer: Buffer.from(
           new X509Certificate(
             Buffer.from(emisor.csd.certificadoBase64, 'base64'),
@@ -289,6 +295,20 @@ export class CancelacionService {
         cer: this.csdStore.certificadoPem(),
         key: this.csdStore.llavePrivadaPem(),
       };
+    }
+  }
+
+  /**
+   * Cuenta del PAC de ese RFC, si la tiene dada de alta.
+   *
+   * Sin ella el cliente cae a la del .env, que es como trabajaba antes de
+   * que cada razon social tuviera la suya.
+   */
+  private async cuentaDe(rfcEmisor: string): Promise<CuentaPac | undefined> {
+    try {
+      return (await this.csdService.obtenerPorRfc(rfcEmisor)).credencialesPac;
+    } catch {
+      return undefined;
     }
   }
 

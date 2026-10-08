@@ -1,4 +1,10 @@
-import { IsBase64, IsString, Matches, MaxLength } from 'class-validator';
+import {
+  IsBase64,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 
 export class GuardarCsdDto {
   /** Contenido del archivo `.cer` en Base64. */
@@ -23,4 +29,21 @@ export class GuardarCsdDto {
   /** CP del lugar de expedicion. Tampoco viene en el certificado. */
   @Matches(/^\d{5}$/, { message: 'codigoPostal son 5 digitos' })
   codigoPostal!: string;
+
+  /**
+   * Usuario de Quadrum de esta razon social.
+   *
+   * Cada RFC timbra con su propia cuenta del PAC, dada de alta junto con su
+   * certificado. Si no se captura, ese RFC usa la cuenta del `.env`.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  quadrumUsuario?: string;
+
+  /** Contrasena de Quadrum. Se guarda cifrada, nunca en claro. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  quadrumPassword?: string;
 }

@@ -32,6 +32,16 @@ import { elementos, escaparTexto, existe, valor } from './soap-xml';
 const NS_SOAP = 'http://schemas.xmlsoap.org/soap/envelope/';
 const NS_TIMBRAR = 'http://ws.cfdiquadrum.com.mx/timbrar';
 
+/**
+ * Cuenta del PAC con la que se hace una llamada.
+ *
+ * Cada razon social tiene la suya, dada de alta junto con su certificado.
+ * Cuando no se pasa ninguna se usa la del .env.
+ */
+export interface CuentaPac {
+  usuario: string;
+  contrasena: string;
+}
 export interface Incidencia {
   idIncidencia?: string;
   rfcEmisor?: string;
@@ -88,12 +98,18 @@ export class QuadrumClient {
     );
   }
 
-  private getUsuario(): string {
-    return this.config.get<string>('QUADRUM_USUARIO') || '';
+  private getUsuario(cuenta?: CuentaPac): string {
+    return (
+      cuenta?.usuario?.trim() ||
+      this.config.get<string>('QUADRUM_USUARIO') ||
+      ''
+    );
   }
 
-  private getContrasena(): string {
-    return this.config.get<string>('QUADRUM_CONTRASENA') || '';
+  private getContrasena(cuenta?: CuentaPac): string {
+    return (
+      cuenta?.contrasena || this.config.get<string>('QUADRUM_CONTRASENA') || ''
+    );
   }
 
   private getTimeoutMs(): number {
@@ -111,14 +127,15 @@ export class QuadrumClient {
     return !/dev/i.test(this.getEndpoint());
   }
 
-  hasCredentials(): boolean {
-    return Boolean(this.getUsuario() && this.getContrasena());
+  hasCredentials(cuenta?: CuentaPac): boolean {
+    return Boolean(this.getUsuario(cuenta) && this.getContrasena(cuenta));
   }
 
-  assertCredentials(): void {
-    if (!this.hasCredentials()) {
+  assertCredentials(cuenta?: CuentaPac): void {
+    if (!this.hasCredentials(cuenta)) {
       throw new ServiceUnavailableException(
-        'Quadrum no configurado: faltan QUADRUM_USUARIO y/o QUADRUM_CONTRASENA',
+        'Quadrum no configurado: ese RFC no tiene cuenta del PAC y tampoco ' +
+          'hay QUADRUM_USUARIO/QUADRUM_CONTRASENA en el .env.',
       );
     }
   }
@@ -128,11 +145,14 @@ export class QuadrumClient {
    *
    * @param xmlSellado XML completo y ya sellado, en UTF-8 **sin BOM**.
    */
-  async timbrar(xmlSellado: Buffer): Promise<AcuseRecepcionCfdi> {
+  async timbrar(
+    xmlSellado: Buffer,
+    cuenta?: CuentaPac,
+  ): Promise<AcuseRecepcionCfdi> {
     if (!xmlSellado?.length) {
       throw new Error('El XML sellado viene vacio.');
     }
-    this.assertCredentials();
+    this.assertCredentials(cuenta);
 
     // Timbrar en produccion gasta un timbre real y genera un CFDI ante el SAT
     // que ya solo se puede cancelar. Que quede en el log en que ambiente fue.
@@ -145,8 +165,8 @@ export class QuadrumClient {
     const cuerpo =
       `<tim:timbrar xmlns:tim="${NS_TIMBRAR}">` +
       `<tim:xml>${xmlSellado.toString('base64')}</tim:xml>` +
-      `<tim:usuario>${escaparTexto(this.getUsuario())}</tim:usuario>` +
-      `<tim:contrasena>${escaparTexto(this.getContrasena())}</tim:contrasena>` +
+      `<tim:usuario>${escaparTexto(this.getUsuario(cuenta))}</tim:usuario>` +
+      `<tim:contrasena>${escaparTexto(this.getContrasena(cuenta))}</tim:contrasena>` +
       `</tim:timbrar>`;
 
     return this.enviar('timbrar', cuerpo, 'timbrarResult');
@@ -162,16 +182,19 @@ export class QuadrumClient {
    * Tambien es la forma mas barata de verificar la conexion con el PAC: no
    * necesita CSD ni XML sellado, solo credenciales.
    */
-  async consultar(uuid: string): Promise<AcuseRecepcionCfdi> {
+  async consultar(
+    uuid: string,
+    cuenta?: CuentaPac,
+  ): Promise<AcuseRecepcionCfdi> {
     if (!uuid?.trim()) {
       throw new Error('UUID requerido.');
     }
-    this.assertCredentials();
+    this.assertCredentials(cuenta);
 
     const cuerpo =
       `<tim:consulta xmlns:tim="${NS_TIMBRAR}">` +
-      `<tim:usuario>${escaparTexto(this.getUsuario())}</tim:usuario>` +
-      `<tim:contrasena>${escaparTexto(this.getContrasena())}</tim:contrasena>` +
+      `<tim:usuario>${escaparTexto(this.getUsuario(cuenta))}</tim:usuario>` +
+      `<tim:contrasena>${escaparTexto(this.getContrasena(cuenta))}</tim:contrasena>` +
       `<tim:uuid>${escaparTexto(uuid.trim())}</tim:uuid>` +
       `</tim:consulta>`;
 
@@ -184,16 +207,20 @@ export class QuadrumClient {
    * Ojo: esta operacion usa `username`/`password`, no `usuario`/`contrasena`
    * como las demas. Asi viene en el WSDL.
    */
-  async obtenerPdf(uuid: string, rfcEmisor: string): Promise<Buffer> {
+  async obtenerPdf(
+    uuid: string,
+    rfcEmisor: string,
+    cuenta?: CuentaPac,
+  ): Promise<Buffer> {
     if (!uuid?.trim()) {
       throw new Error('Falta el UUID para pedir el PDF.');
     }
-    this.assertCredentials();
+    this.assertCredentials(cuenta);
 
     const cuerpo =
       `<tim:obtener_pdf xmlns:tim="${NS_TIMBRAR}">` +
-      `<tim:username>${escaparTexto(this.getUsuario())}</tim:username>` +
-      `<tim:password>${escaparTexto(this.getContrasena())}</tim:password>` +
+      `<tim:username>${escaparTexto(this.getUsuario(cuenta))}</tim:username>` +
+      `<tim:password>${escaparTexto(this.getContrasena(cuenta))}</tim:password>` +
       `<tim:uuid>${escaparTexto(uuid.trim())}</tim:uuid>` +
       `<tim:rfc_emisor>${escaparTexto(rfcEmisor.trim().toUpperCase())}</tim:rfc_emisor>` +
       `</tim:obtener_pdf>`;

@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { cargarCsd, Csd, CsdInvalidoError } from './cfdi-sellador';
 import { cifrar, CifradoInvalidoError, descifrar } from './cripto';
-import { CsdRepositorio, ResumenFilaCsd } from './csd.repositorio';
+import { CsdRepositorio, FilaCsd, ResumenFilaCsd } from './csd.repositorio';
 
 export interface AltaCsdInput {
   /** Contenido del `.cer` en Base64. */
@@ -22,6 +22,14 @@ export interface AltaCsdInput {
   /** CP del lugar de expedicion: tampoco viene en el certificado. */
   codigoPostal: string;
   usuario?: string;
+  /**
+   * Cuenta de Quadrum de esta razon social.
+   *
+   * Van con el certificado porque son del mismo contrato con el PAC. Si
+   * no se capturan, ese RFC timbra con la cuenta del .env.
+   */
+  quadrumUsuario?: string;
+  quadrumPassword?: string;
 }
 
 export interface ResumenCsd {
@@ -36,11 +44,18 @@ export interface ResumenCsd {
 }
 
 /** El CSD listo para sellar, mas los datos que el certificado no trae. */
+export interface CredencialesPac {
+  usuario: string;
+  contrasena: string;
+}
+
 export interface CsdEmisor {
   csd: Csd;
   cer: Buffer;
   regimenFiscal: string;
   codigoPostal: string;
+  /** Cuenta del PAC de este RFC. Undefined = se usa la del .env. */
+  credencialesPac?: CredencialesPac;
 }
 
 /** Tamano maximo por archivo: un CSD real ronda los 2 KB. */
@@ -107,6 +122,12 @@ export class CsdService {
       vigenciaDesde: csd.validoDesde,
       vigenciaHasta: csd.validoHasta,
       usuario: input.usuario,
+      quadrumUsuario: input.quadrumUsuario?.trim() || null,
+      // La contrasena del PAC se cifra igual que la del .key: nunca se
+      // guarda en claro.
+      quadrumPasswordCifrada: input.quadrumPassword
+        ? cifrar(input.quadrumPassword, this.secreto())
+        : null,
     });
 
     this.cache.delete(csd.rfc.toUpperCase());
@@ -173,12 +194,41 @@ export class CsdService {
       cer: fila.CER,
       regimenFiscal: fila.REGIMEN_FISCAL,
       codigoPostal: fila.CODIGO_POSTAL,
+      credencialesPac: this.credencialesDe(fila, clave),
     };
     this.cache.set(clave, emisor);
     return emisor;
   }
 
   // ---------------------------------------------------------------------
+
+  /**
+   * Cuenta del PAC de ese RFC, si se capturo.
+   *
+   * Si la contrasena no se puede descifrar no se tumba el timbrado: se
+   * avisa y se cae a la cuenta del .env, que es el comportamiento previo.
+   */
+  private credencialesDe(
+    fila: FilaCsd,
+    clave: string,
+  ): CredencialesPac | undefined {
+    const usuario = fila.QUADRUM_USUARIO?.trim();
+    if (!usuario || !fila.QUADRUM_PASSWORD_CIFRADA) return undefined;
+
+    try {
+      return {
+        usuario,
+        contrasena: descifrar(fila.QUADRUM_PASSWORD_CIFRADA, this.secreto()),
+      };
+    } catch (e) {
+      const detalle = e instanceof Error ? e.message : String(e);
+      this.logger.warn(
+        `No se pudo descifrar la contrasena de Quadrum de ${clave}: ${detalle}. ` +
+          `Se usara la cuenta del .env.`,
+      );
+      return undefined;
+    }
+  }
 
   private secreto(): string {
     const llave = this.config.get<string>('CSD_CIFRADO_LLAVE');

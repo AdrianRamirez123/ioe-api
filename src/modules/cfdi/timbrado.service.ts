@@ -36,7 +36,12 @@ import {
 import { CsdService } from './csd.service';
 import { CsdStore, ResumenCsd } from './csd.store';
 import { fechaCfdi } from './fecha-expedicion';
-import { Incidencia, PacError, QuadrumClient } from './quadrum.client';
+import {
+  CuentaPac,
+  Incidencia,
+  PacError,
+  QuadrumClient,
+} from './quadrum.client';
 import { decodificarXmlEmbebido } from './soap-xml';
 
 export const OPCIONES_XML_CFDI40: SerializarOpciones = {
@@ -79,6 +84,14 @@ export type DatosVenta = Omit<DatosComprobante, 'emisor'> & {
 export interface CredencialesSellado {
   csd: Csd;
   cer: Buffer;
+  /**
+   * Cuenta de Quadrum de esa razon social.
+   *
+   * Va aqui y no por separado porque el certificado y la cuenta son del
+   * mismo contrato: sellar con un CSD y timbrar con la cuenta de otro RFC
+   * es un error que el PAC rechaza.
+   */
+  cuentaPac?: CuentaPac;
 }
 
 /** Datos del abono para el recibo de pago de prueba. */
@@ -332,7 +345,11 @@ export class TimbradoService {
       });
       return {
         comprobante,
-        credenciales: { csd: emisor.csd, cer: emisor.cer },
+        credenciales: {
+          csd: emisor.csd,
+          cer: emisor.cer,
+          cuentaPac: emisor.credencialesPac,
+        },
       };
     } catch (e) {
       if (e instanceof ComprobanteInvalidoError) {
@@ -368,6 +385,7 @@ export class TimbradoService {
     return this.timbrar(comprobante, {
       csd: emisor.csd,
       cer: emisor.cer,
+      cuentaPac: emisor.credencialesPac,
     });
   }
 
@@ -443,6 +461,7 @@ export class TimbradoService {
     const resultado = await this.timbrar(comprobante, {
       csd: emisor.csd,
       cer: emisor.cer,
+      cuentaPac: emisor.credencialesPac,
     });
     return { ...resultado, total: comprobante.attrs.get('Total') ?? '' };
   }
@@ -470,7 +489,7 @@ export class TimbradoService {
 
     let acuse: Awaited<ReturnType<QuadrumClient['timbrar']>>;
     try {
-      acuse = await this.quadrum.timbrar(listo.bytes);
+      acuse = await this.quadrum.timbrar(listo.bytes, credenciales?.cuentaPac);
     } catch (e) {
       if (!(e instanceof PacError)) throw e;
       writeFileSync(

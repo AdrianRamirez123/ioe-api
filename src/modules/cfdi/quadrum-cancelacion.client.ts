@@ -6,6 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PacError } from './quadrum.client';
 import { elementos, escaparTexto, existe, valor } from './soap-xml';
+import { CuentaPac } from './quadrum.client';
 
 /**
  * Cliente SOAP del servicio de CANCELACION de Quadrum.
@@ -82,6 +83,8 @@ export interface CancelarInput {
   /** Llave privada en PKCS#8 **PEM**, sin cifrar. */
   key: Buffer;
   reintentar?: boolean;
+  /** Cuenta del PAC de esa razon social. Sin ella se usa la del .env. */
+  cuenta?: CuentaPac;
 }
 
 @Injectable()
@@ -103,14 +106,15 @@ export class QuadrumCancelacionClient {
     return !/dev/i.test(this.getEndpoint());
   }
 
-  hasCredentials(): boolean {
-    return Boolean(this.getUsuario() && this.getContrasena());
+  hasCredentials(cuenta?: CuentaPac): boolean {
+    return Boolean(this.getUsuario(cuenta) && this.getContrasena(cuenta));
   }
 
-  assertCredentials(): void {
-    if (!this.hasCredentials()) {
+  assertCredentials(cuenta?: CuentaPac): void {
+    if (!this.hasCredentials(cuenta)) {
       throw new ServiceUnavailableException(
-        'Quadrum no configurado: faltan QUADRUM_USUARIO y/o QUADRUM_CONTRASENA',
+        'Quadrum no configurado: ese RFC no tiene cuenta del PAC y tampoco ' +
+          'hay QUADRUM_USUARIO/QUADRUM_CONTRASENA en el .env.',
       );
     }
   }
@@ -126,12 +130,13 @@ export class QuadrumCancelacionClient {
     rfcEmisor: string;
     rfcReceptor: string;
     total: string;
+    cuenta?: CuentaPac;
   }): Promise<EstatusSat> {
-    this.assertCredentials();
+    this.assertCredentials(input.cuenta);
     const cuerpo =
       `<can:obtiene_status_sat xmlns:can="${NS_CANCELAR}">` +
-      `<can:usario>${escaparTexto(this.getUsuario())}</can:usario>` +
-      `<can:password>${escaparTexto(this.getContrasena())}</can:password>` +
+      `<can:usario>${escaparTexto(this.getUsuario(input.cuenta))}</can:usario>` +
+      `<can:password>${escaparTexto(this.getContrasena(input.cuenta))}</can:password>` +
       `<can:taxpayer_id>${escaparTexto(input.rfcEmisor)}</can:taxpayer_id>` +
       `<can:rtaxpayer_id>${escaparTexto(input.rfcReceptor)}</can:rtaxpayer_id>` +
       `<can:uuid>${escaparTexto(input.uuid)}</can:uuid>` +
@@ -154,7 +159,7 @@ export class QuadrumCancelacionClient {
 
   /** Solicita la cancelacion de un CFDI. Usa el CSD del emisor. */
   async cancelar(input: CancelarInput): Promise<AcuseCancelacion> {
-    this.assertCredentials();
+    this.assertCredentials(input.cuenta);
 
     const folioSust = input.folioSustitucion
       ? ` FolioSustitucion="${escaparTexto(input.folioSustitucion)}"`
@@ -165,8 +170,8 @@ export class QuadrumCancelacionClient {
       `<vw:UUID xmlns:vw="${NS_VIEWS}" UUID="${escaparTexto(input.uuid)}"` +
       ` Motivo="${escaparTexto(input.motivo)}"${folioSust}/>` +
       `</can:UUIDS>` +
-      `<can:usuario>${escaparTexto(this.getUsuario())}</can:usuario>` +
-      `<can:contrasena>${escaparTexto(this.getContrasena())}</can:contrasena>` +
+      `<can:usuario>${escaparTexto(this.getUsuario(input.cuenta))}</can:usuario>` +
+      `<can:contrasena>${escaparTexto(this.getContrasena(input.cuenta))}</can:contrasena>` +
       `<can:rfc>${escaparTexto(input.rfcEmisor)}</can:rfc>` +
       `<can:cer>${input.cer.toString('base64')}</can:cer>` +
       `<can:key>${input.key.toString('base64')}</can:key>` +
@@ -206,12 +211,13 @@ export class QuadrumCancelacionClient {
     uuid: string;
     rfcEmisor: string;
     tipo?: string;
+    cuenta?: CuentaPac;
   }): Promise<ReciboAcuse> {
-    this.assertCredentials();
+    this.assertCredentials(input.cuenta);
     const cuerpo =
       `<can:acuse xmlns:can="${NS_CANCELAR}">` +
-      `<can:usuario>${escaparTexto(this.getUsuario())}</can:usuario>` +
-      `<can:contrasena>${escaparTexto(this.getContrasena())}</can:contrasena>` +
+      `<can:usuario>${escaparTexto(this.getUsuario(input.cuenta))}</can:usuario>` +
+      `<can:contrasena>${escaparTexto(this.getContrasena(input.cuenta))}</can:contrasena>` +
       `<can:rfc>${escaparTexto(input.rfcEmisor)}</can:rfc>` +
       `<can:uuid>${escaparTexto(input.uuid)}</can:uuid>` +
       `<can:tipo>${escaparTexto(input.tipo ?? 'cancelacion')}</can:tipo>` +
@@ -230,12 +236,18 @@ export class QuadrumCancelacionClient {
 
   // ---------------------------------------------------------------------
 
-  private getUsuario(): string {
-    return this.config.get<string>('QUADRUM_USUARIO') || '';
+  private getUsuario(cuenta?: CuentaPac): string {
+    return (
+      cuenta?.usuario?.trim() ||
+      this.config.get<string>('QUADRUM_USUARIO') ||
+      ''
+    );
   }
 
-  private getContrasena(): string {
-    return this.config.get<string>('QUADRUM_CONTRASENA') || '';
+  private getContrasena(cuenta?: CuentaPac): string {
+    return (
+      cuenta?.contrasena || this.config.get<string>('QUADRUM_CONTRASENA') || ''
+    );
   }
 
   private getTimeoutMs(): number {

@@ -13,6 +13,9 @@ export interface FilaCsd {
   PASSWORD_CIFRADA: string;
   VIGENCIA_DESDE: Date;
   VIGENCIA_HASTA: Date;
+  /** Cuenta de Quadrum de esta razon social. Nulo = se usa la del .env. */
+  QUADRUM_USUARIO: string | null;
+  QUADRUM_PASSWORD_CIFRADA: string | null;
 }
 
 /** Lo que se puede mostrar: sin archivos ni contrasena. */
@@ -27,6 +30,8 @@ export interface ResumenFilaCsd {
   activo: boolean;
   fechaAlta: Date;
   usuarioAlta: string | null;
+  /** Cuenta del PAC. Se muestra para saber con cual timbra cada RFC. */
+  quadrumUsuario: string | null;
 }
 
 export interface GuardarFilaCsd {
@@ -41,6 +46,9 @@ export interface GuardarFilaCsd {
   vigenciaDesde: Date;
   vigenciaHasta: Date;
   usuario?: string;
+  /** Cuenta de Quadrum. Si no viene, se conserva la que ya estuviera. */
+  quadrumUsuario?: string | null;
+  quadrumPasswordCifrada?: string | null;
 }
 
 /**
@@ -70,7 +78,8 @@ export class CsdRepositorio {
     await this.assertTabla();
     const rows: FilaCsd[] = await this.dataSource.query(
       `SELECT TOP 1 RFC, NOMBRE, NO_CERTIFICADO, REGIMEN_FISCAL, CODIGO_POSTAL,
-              CER, LLAVE, PASSWORD_CIFRADA, VIGENCIA_DESDE, VIGENCIA_HASTA
+              CER, LLAVE, PASSWORD_CIFRADA, VIGENCIA_DESDE, VIGENCIA_HASTA,
+              QUADRUM_USUARIO, QUADRUM_PASSWORD_CIFRADA
          FROM dbo.FACT_CSD
         WHERE RFC = @0 AND ACTIVO = 1`,
       [rfc.trim().toUpperCase()],
@@ -91,9 +100,11 @@ export class CsdRepositorio {
       ACTIVO: boolean;
       FCN_ALTA: Date;
       USUARIO_ALTA: string | null;
+      QUADRUM_USUARIO: string | null;
     }[] = await this.dataSource.query(
       `SELECT RFC, NOMBRE, NO_CERTIFICADO, REGIMEN_FISCAL, CODIGO_POSTAL,
-              VIGENCIA_DESDE, VIGENCIA_HASTA, ACTIVO, FCN_ALTA, USUARIO_ALTA
+              VIGENCIA_DESDE, VIGENCIA_HASTA, ACTIVO, FCN_ALTA, USUARIO_ALTA,
+              QUADRUM_USUARIO
          FROM dbo.FACT_CSD
         ORDER BY RFC, ACTIVO DESC, VIGENCIA_HASTA DESC`,
     );
@@ -107,6 +118,7 @@ export class CsdRepositorio {
       validoHasta: r.VIGENCIA_HASTA,
       activo: Boolean(r.ACTIVO),
       fechaAlta: r.FCN_ALTA,
+      quadrumUsuario: r.QUADRUM_USUARIO,
       usuarioAlta: r.USUARIO_ALTA,
     }));
   }
@@ -137,6 +149,8 @@ export class CsdRepositorio {
         fila.vigenciaDesde,
         fila.vigenciaHasta,
         fila.usuario ?? null,
+        fila.quadrumUsuario ?? null,
+        fila.quadrumPasswordCifrada ?? null,
       ];
 
       // Recargar el mismo certificado (por ejemplo tras corregir el CP) no
@@ -148,14 +162,19 @@ export class CsdRepositorio {
               SET NOMBRE = @2, REGIMEN_FISCAL = @3, CODIGO_POSTAL = @4,
                   CER = @5, LLAVE = @6, PASSWORD_CIFRADA = @7,
                   VIGENCIA_DESDE = @8, VIGENCIA_HASTA = @9,
-                  ACTIVO = 1, FCN_ALTA = SYSDATETIME(), USUARIO_ALTA = @10
+                  ACTIVO = 1, FCN_ALTA = SYSDATETIME(), USUARIO_ALTA = @10,
+                  -- Recargar el certificado sin recapturar la cuenta no
+                  -- debe borrarla: solo se pisa si viene una nueva.
+                  QUADRUM_USUARIO = COALESCE(@11, QUADRUM_USUARIO),
+                  QUADRUM_PASSWORD_CIFRADA =
+                    COALESCE(@12, QUADRUM_PASSWORD_CIFRADA)
             WHERE RFC = @0 AND NO_CERTIFICADO = @1;
          ELSE
            INSERT INTO dbo.FACT_CSD
              (RFC, NO_CERTIFICADO, NOMBRE, REGIMEN_FISCAL, CODIGO_POSTAL,
               CER, LLAVE, PASSWORD_CIFRADA, VIGENCIA_DESDE, VIGENCIA_HASTA,
-              ACTIVO, USUARIO_ALTA)
-           VALUES (@0, @1, @2, @3, @4, @5, @6, @7, @8, @9, 1, @10);`,
+              ACTIVO, USUARIO_ALTA, QUADRUM_USUARIO, QUADRUM_PASSWORD_CIFRADA)
+           VALUES (@0, @1, @2, @3, @4, @5, @6, @7, @8, @9, 1, @10, @11, @12);`,
         parametros,
       );
     });

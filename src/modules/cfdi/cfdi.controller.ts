@@ -232,6 +232,8 @@ export class CfdiController {
       password: dto.password,
       regimenFiscal: dto.regimenFiscal,
       codigoPostal: dto.codigoPostal,
+      quadrumUsuario: dto.quadrumUsuario,
+      quadrumPassword: dto.quadrumPassword,
       usuario: String(user?.sub ?? user?.username ?? ''),
     });
   }
